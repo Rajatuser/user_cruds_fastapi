@@ -8,4 +8,6 @@
    ##### for development
      uvicorn main:app --reload
   ##### for production
-     uvicorn main:app     
+     uvicorn main:app
+### To generate a JWT secret key:
+    openssl rand -hex 32
