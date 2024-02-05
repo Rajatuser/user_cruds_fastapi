@@ -1,7 +1,7 @@
 from fastapi import Depends, FastAPI, HTTPException, status, Body
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError, validator, EmailStr, root_validator
 from typing import Union
@@ -26,7 +26,7 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 app = FastAPI()
 db = SessionLocal()
 origins = [
-    "http://localhost",
+    "http://localhost:5000",
     "http://localhost:8080",
 ]
 
