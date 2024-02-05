@@ -12,7 +12,6 @@ db_name = os.getenv('DB_NAME')
 db_host = os.getenv('DB_HOST')
 
 SQLALCHEMY_DATABASE_URL = f"mysql+pymysql://{db_user}:{db_password}@{db_host}/{db_name}"
-# SQLALCHEMY_DATABASE_URL = "postgresql://user:password@postgresserver/db"
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL
