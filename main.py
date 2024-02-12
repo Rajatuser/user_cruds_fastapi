@@ -4,7 +4,7 @@ from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError, validator, EmailStr, root_validator
-from typing import Union
+from typing import List, Union
 from database_connections.models import Users
 from database_connections.connection import *
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,6 +13,9 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timedelta, timezone
 from typing_extensions import Annotated
 import os
+from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
+from htmlTemplates import forgot_template
+
 
 load_dotenv()
 
@@ -23,16 +26,35 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 24 * 60
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
+####### Email Configurations######
+class EmailSchema(BaseModel):
+    email: List[EmailStr]
+
+
+conf = ConnectionConfig(
+    MAIL_USERNAME = str(os.getenv('MAIL_FROM')),
+    MAIL_PASSWORD = str(os.getenv('MAIL_PASSWORD')),
+    MAIL_FROM = str(os.getenv('MAIL_FROM')),
+    MAIL_PORT = 587,
+    MAIL_SERVER = str(os.getenv("MAIL_SERVER")),
+    MAIL_FROM_NAME="hanish",
+    MAIL_STARTTLS = True,
+    MAIL_SSL_TLS = False,
+    USE_CREDENTIALS = True,
+    VALIDATE_CERTS = False
+)
+
+
 app = FastAPI()
 db = SessionLocal()
 origins = [
-    "http://localhost:5000",
-    "http://localhost:8080",
+    "http://localhost:3000",
+    "http://localhost:8000",
 ]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -101,6 +123,9 @@ class Token(BaseModel):
     access_token: str
     token_type: str
 
+class Forgot_password(BaseModel):
+    email: EmailStr
+
 class Update_user_info(BaseModel):
     email: EmailStr = None
     password: str = None
@@ -125,12 +150,16 @@ Method: POST
 @app.post('/register_user')
 def register_user(user_credentials: Users_cred = Body()):
     try:
-        user = Users(**user_credentials.dict(), created_at=datetime.utcnow())
-        db.add(user)
-        db.commit()
-        return JSONResponse(content={'message':'User registered successfully'}, status_code=200)
+        user_exists = db.query(Users).filter_by(email=user_credentials.email).first()
+        if user_exists is None:
+            user = Users(**user_credentials.dict(), created_at=datetime.utcnow())
+            db.add(user)
+            db.commit()
+            return JSONResponse(content={'message':'User registered successfully'}, status_code=200)
+        else:
+            return JSONResponse(content={'message':'User already exists'}, status_code=409)
     except ValidationError as e:
-        return {"error": e.errors()}
+         return JSONResponse(content={'message':'Server Error'}, status_code=409)
     
 """
 This API login user
@@ -140,16 +169,12 @@ Method: POST
 def login_user(login_creds: Annotated[login, Body()]) -> Token:
     authenticate_current_user = authenticate_user(login_creds.email, login_creds.password)
     if not authenticate_current_user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or password",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        return JSONResponse(content={"message":"User credentials are incorrect"}, status_code=404)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
     )
-    return Token(access_token=access_token, token_type="bearer")
+    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer","user":authenticate_current_user.email,"role":authenticate_current_user.role},status_code=200)
 
 """
 This API gets all users
@@ -203,3 +228,45 @@ def delete_user(user_id:int,current_user: str = Depends(get_current_user)):
         return JSONResponse(content={'message':'User deleted successfully'}, status_code=200)
     else:
         return JSONResponse(content={'message':'User not found'}, status_code=404)
+
+
+"""
+Forgot password API
+"""
+@app.post('/forgot_password')
+async def forgot_password(email: EmailSchema) -> JSONResponse:
+    html = forgot_template()
+    access_token_expires = timedelta(minutes=10)
+    access_token = create_access_token(
+        data={"sub": email.dict().get("email")[0]}, expires_delta=access_token_expires
+    )
+    updated_template = html.replace('{email}',email.dict().get("email")[0]).replace('{change_password_link}',f'http://127.0.0.1:3000/changePassword/{access_token}')
+    message = MessageSchema(
+        subject="Password Reset",
+        recipients=email.dict().get("email"),
+        body=updated_template,
+        subtype=MessageType.html)
+
+    fm = FastMail(conf)
+    await fm.send_message(message)
+    return JSONResponse(status_code=200, content={"message": "Reset Link is sent on your email."})
+
+
+"""
+This API check if user exists for password change
+"""
+@app.post('/authorize_user')
+def change_password_page(current_user: str = Depends(get_current_user)):
+        return JSONResponse(content={"message":"User Found"}, status_code=200)
+    # else:
+    #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
+
+# """
+# This API changes password
+# """
+# @app.post('/update_password')
+# def 
+    
+
+
+
