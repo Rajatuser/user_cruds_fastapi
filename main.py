@@ -115,6 +115,12 @@ class Users_cred(BaseModel):
     def hash_password(cls, v):
         return hash_password(v)
 
+class updated_password(BaseModel):
+    password: str
+    @validator("password")
+    def hash_password(cls, v):
+        return hash_password(v)
+
 class login(BaseModel):
     email: str
     password: str
@@ -261,11 +267,20 @@ def change_password_page(current_user: str = Depends(get_current_user)):
     # else:
     #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
 
-# """
-# This API changes password
-# """
-# @app.post('/update_password')
-# def 
+"""
+This API changes password
+"""
+@app.post('/update_password')
+def update_user_password(updated_user_password:updated_password,current_user: str = Depends(get_current_user)):
+    if updated_user_password.password is not None:
+        user_exists = db.query(Users).filter_by(email=current_user).first()
+        if user_exists:
+            user_exists.password = updated_user_password.password
+            db.commit()
+            return JSONResponse(status_code=200, content={"message": "Password Updated Succefully"})
+        else:
+            return JSONResponse(status_code=404, content={"message": "User not found"})
+                
     
 
 

@@ -1,0 +1,13 @@
+version: '3'
+services:
+  fast-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./:/app
+    environment:
+      - APP_ENV=production
+    network_mode: host
