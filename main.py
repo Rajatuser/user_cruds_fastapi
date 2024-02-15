@@ -106,24 +106,56 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 
 ################## Validations #################################
 class Users_cred(BaseModel):
-    email: str
+    email: EmailStr
     password: str
     role: str
     active: bool = True
 
+    @validator("role")
+    def validate_role(cls, v):
+        if not v.strip():
+            raise ValueError("Role cannot be empty")
+        return v.strip()
+    
+    @validator("password")
+    def validate_password(cls, v):
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        if ' ' in v.strip():
+            raise ValueError("Password cannot contain spaces")
+        return v.strip()
+    
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
 
 class updated_password(BaseModel):
     password: str
+
+    @validator("password")
+    def validate_password(cls, v):
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        if ' ' in v.strip():
+            raise ValueError("Password cannot contain spaces")
+        return v.strip()
+    
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
 
 class login(BaseModel):
-    email: str
+    email: EmailStr
     password: str
+    
+    @validator("password")
+    def validate_password(cls, v):
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        if ' ' in v.strip():
+            raise ValueError("Password cannot contain spaces")
+        return v.strip()
+
 
 class Token(BaseModel):
     access_token: str
@@ -146,6 +178,24 @@ class Update_user_info(BaseModel):
             raise ValueError(f"At least one of {required_fields} is required")
         return values
 
+    @validator("role")
+    def validate_role(cls, v):
+        if not v.strip():
+            raise ValueError("Role cannot be empty")
+        return v.strip()
+    
+    @validator("password")
+    def validate_password(cls, v):
+        if not v.strip():
+            raise ValueError("Password cannot be empty")
+        if ' ' in v.strip():
+            raise ValueError("Password cannot contain spaces")
+        return v.strip()
+    
+    @validator("password")
+    def hash_password(cls, v):
+        return hash_password(v)
+
 
 ###################### User API's ###########################
 
@@ -165,6 +215,7 @@ def register_user(user_credentials: Users_cred = Body()):
         else:
             return JSONResponse(content={'message':'User already exists'}, status_code=409)
     except ValidationError as e:
+         db.rollback() 
          return JSONResponse(content={'message':'Server Error'}, status_code=409)
     
 """
@@ -210,6 +261,9 @@ def update_user(user_id: int, update_credentials: Update_user_info = Body(),curr
     user_exists = db.query(Users).get(user_id)
     if user_exists is not None:
         if update_credentials.email is not None:
+            email_exists = db.query(Users).filter_by(email=update_credentials.email).first()
+            if email_exists:
+                return JSONResponse(content={'message':'Email already exists'}, status_code=409)
             user_exists.email = update_credentials.email
         if update_credentials.password is not None:
             user_exists.password = hash_password(update_credentials.password)
@@ -220,6 +274,7 @@ def update_user(user_id: int, update_credentials: Update_user_info = Body(),curr
         db.commit()
         return JSONResponse(content={'message':'User updated successfully'}, status_code=200)
     else:
+        db.rollback() 
         return JSONResponse(content={'message':'User not found'}, status_code=404)
 
 """
