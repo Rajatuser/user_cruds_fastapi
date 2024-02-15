@@ -115,13 +115,15 @@ class Users_cred(BaseModel):
     def validate_role(cls, v):
         if not v.strip():
             raise ValueError("Role cannot be empty")
+        if v not in {"user", "admin", "superadmin"}:
+            raise ValueError("Invalid role. Allowed values: user, admin, superadmin")
         return v.strip()
     
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v.strip():
+        if ' ' in v:
             raise ValueError("Password cannot contain spaces")
         return v.strip()
     
@@ -136,7 +138,7 @@ class updated_password(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v.strip():
+        if ' ' in v:
             raise ValueError("Password cannot contain spaces")
         return v.strip()
     
@@ -152,7 +154,7 @@ class login(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v.strip():
+        if ' ' in v:
             raise ValueError("Password cannot contain spaces")
         return v.strip()
 
@@ -182,13 +184,15 @@ class Update_user_info(BaseModel):
     def validate_role(cls, v):
         if not v.strip():
             raise ValueError("Role cannot be empty")
+        if v not in {"user", "admin", "superadmin"}:
+            raise ValueError("Invalid role. Allowed values: user, admin, superadmin")
         return v.strip()
     
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v.strip():
+        if ' ' in v:
             raise ValueError("Password cannot contain spaces")
         return v.strip()
     
