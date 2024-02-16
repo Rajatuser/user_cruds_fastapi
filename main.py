@@ -123,8 +123,10 @@ class Users_cred(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v:
-            raise ValueError("Password cannot contain spaces")
+        if ' ' in v or '.' in v:
+            raise ValueError("Password cannot contain spaces and dot")
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
         return v
     
     @validator("password")
@@ -138,8 +140,10 @@ class updated_password(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v:
-            raise ValueError("Password cannot contain spaces")
+        if ' ' in v or '.' in v:
+            raise ValueError("Password cannot contain spaces and dot")
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
         return v
     
     @validator("password")
@@ -154,8 +158,10 @@ class login(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v:
-            raise ValueError("Password cannot contain spaces")
+        if ' ' in v or '.' in v:
+            raise ValueError("Password cannot contain spaces and dot")
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
         return v
 
 
@@ -192,8 +198,10 @@ class Update_user_info(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v:
-            raise ValueError("Password cannot contain spaces")
+        if ' ' in v or '.' in v:
+            raise ValueError("Password cannot contain spaces and dot")
+        if len(v) < 6:
+            raise ValueError("Password must be at least 6 characters long")
         return v
     
     @validator("password")
