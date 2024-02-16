@@ -125,7 +125,7 @@ class Users_cred(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v:
             raise ValueError("Password cannot contain spaces")
-        return v.strip()
+        return v
     
     @validator("password")
     def hash_password(cls, v):
@@ -140,7 +140,7 @@ class updated_password(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v:
             raise ValueError("Password cannot contain spaces")
-        return v.strip()
+        return v
     
     @validator("password")
     def hash_password(cls, v):
@@ -156,7 +156,7 @@ class login(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v:
             raise ValueError("Password cannot contain spaces")
-        return v.strip()
+        return v
 
 
 class Token(BaseModel):
@@ -194,7 +194,7 @@ class Update_user_info(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v:
             raise ValueError("Password cannot contain spaces")
-        return v.strip()
+        return v
     
     @validator("password")
     def hash_password(cls, v):
