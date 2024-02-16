@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
-from pydantic import BaseModel, ValidationError, validator, EmailStr, root_validator
+from pydantic import BaseModel, ValidationError, validator, EmailStr, root_validator, Extra, Field
 from typing import List, Union
 from database_connections.models import Users
 from database_connections.connection import *
@@ -15,6 +15,7 @@ from typing_extensions import Annotated
 import os
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from htmlTemplates import forgot_template
+import re
 
 
 load_dotenv()
@@ -30,6 +31,8 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 class EmailSchema(BaseModel):
     email: List[EmailStr]
 
+    class Config:
+        extra = Extra.forbid
 
 conf = ConnectionConfig(
     MAIL_USERNAME = str(os.getenv('MAIL_FROM')),
@@ -105,12 +108,20 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
     return username
 
 ################## Validations #################################
+pattern = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,15}$')
 class Users_cred(BaseModel):
     email: EmailStr
     password: str
     role: str
     active: bool = True
-
+    name: str = Field(None, pattern=r'^[a-zA-Z]+(?: [a-zA-Z]+)?$', description="Name can only contain alphabets and one space only")
+    
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not v:
+            raise ValueError("Email cannot be empty")
+        return v
+    
     @validator("role")
     def validate_role(cls, v):
         if not v.strip():
@@ -125,13 +136,17 @@ class Users_cred(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v or '.' in v:
             raise ValueError("Password cannot contain spaces and dot")
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
+        if len(v) > 15:
+             raise ValueError("Password length must not exceed 15 characters")
+        if not pattern.match(v):
+            raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
     
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
+    class Config:
+        extra = Extra.forbid
 
 class updated_password(BaseModel):
     password: str
@@ -142,8 +157,8 @@ class updated_password(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v or '.' in v:
             raise ValueError("Password cannot contain spaces and dot")
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
+        if not pattern.match(v):
+            raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
     
     @validator("password")
@@ -153,30 +168,54 @@ class updated_password(BaseModel):
 class login(BaseModel):
     email: EmailStr
     password: str
-    
+
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not v:
+            raise ValueError("Email cannot be empty")
+        return v
+
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
         if ' ' in v or '.' in v:
             raise ValueError("Password cannot contain spaces and dot")
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
         return v
+    class Config:
+        extra = Extra.forbid
 
 
 class Token(BaseModel):
     access_token: str
     token_type: str
+    
+    class Config:
+        extra = Extra.forbid
 
 class Forgot_password(BaseModel):
     email: EmailStr
+
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not v:
+            raise ValueError("Email cannot be empty")
+        return v
+    class Config:
+        extra = Extra.forbid
 
 class Update_user_info(BaseModel):
     email: EmailStr = None
     password: str = None
     role: str = None
     active: str = None
+
+
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not v:
+            raise ValueError("Email cannot be empty")
+        return v
  
     @root_validator(pre=True)
     def at_least_one_field_required(cls, values):
@@ -200,13 +239,19 @@ class Update_user_info(BaseModel):
             raise ValueError("Password cannot be empty")
         if ' ' in v or '.' in v:
             raise ValueError("Password cannot contain spaces and dot")
-        if len(v) < 6:
-            raise ValueError("Password must be at least 6 characters long")
+        if len(v) > 15:
+             raise ValueError("Password length must not exceed 15 characters")
+        if not pattern.match(v):
+            raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
     
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
+    
+    class Config:
+        extra = Extra.forbid
+
 
 
 ###################### User API's ###########################
