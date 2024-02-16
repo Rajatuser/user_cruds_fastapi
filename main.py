@@ -358,7 +358,7 @@ async def forgot_password(email: EmailSchema) -> JSONResponse:
     access_token = create_access_token(
         data={"sub": email.dict().get("email")[0]}, expires_delta=access_token_expires
     )
-    updated_template = html.replace('{email}',email.dict().get("email")[0]).replace('{change_password_link}',f'http://127.0.0.1:3000/changePassword/{access_token}')
+    updated_template = html.replace('{email}',email.dict().get("email")[0]).replace('{change_password_link}',f'http://192.168.0.102:3000/changePassword/{access_token}')
     message = MessageSchema(
         subject="Password Reset",
         recipients=email.dict().get("email"),
