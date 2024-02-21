@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, status, Body
+from fastapi import Depends, FastAPI, HTTPException, status, Body , Query , Response
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
@@ -16,6 +16,7 @@ import os
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from htmlTemplates import forgot_template
 import re
+from typing import List
 
 
 load_dotenv()
@@ -230,7 +231,7 @@ class Update_user_info(BaseModel):
         if not v.strip():
             raise ValueError("Role cannot be empty")
         if v not in {"user", "admin", "superadmin"}:
-            raise ValueError("Invalid role. Allowed values: user, admin, superadmin")
+            raise ValueError("Allowed role values: user, admin, superadmin")
         return v.strip()
     
     @validator("password")
@@ -255,6 +256,12 @@ class Update_user_info(BaseModel):
 
 
 ###################### User API's ###########################
+        
+def get_pagination_params(
+    page: int = Query(1, gt=0),
+    per_page: int = Query(10, gt=0)
+):
+    return {"page": page, "per_page": per_page}
 
 """
 This API creates user
@@ -268,12 +275,12 @@ def register_user(user_credentials: Users_cred = Body()):
             user = Users(**user_credentials.dict(), created_at=datetime.utcnow())
             db.add(user)
             db.commit()
-            return JSONResponse(content={'message':'User registered successfully'}, status_code=200)
+            return JSONResponse(content={'message':'User registered successfully'}, status_code=201)
         else:
-            return JSONResponse(content={'message':'User already exists'}, status_code=409)
+            return JSONResponse(content={'message':'User already exists'}, status_code=403)
     except ValidationError as e:
          db.rollback() 
-         return JSONResponse(content={'message':'Server Error'}, status_code=409)
+         return JSONResponse(content={'message':'Server Error'}, status_code=500)
     
 """
 This API login user
@@ -288,14 +295,35 @@ def login_user(login_creds: Annotated[login, Body()]) -> Token:
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
     )
-    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer","user":authenticate_current_user.email,"role":authenticate_current_user.role},status_code=200)
+    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer"},status_code=200)
+
+
+"""
+This API get user information
+METHOD: POST
+"""
+@app.get('/user_info')
+def user_information(current_user: str = Depends(get_current_user)):
+    user_info = db.query(Users).filter_by(email=current_user).first()
+    if user_info:
+        user_info_dict = {
+                "id":user_info.id,
+                "email":user_info.email,
+                "role":user_info.role,
+                "active":user_info.active
+        }
+        return JSONResponse(content={'message':'User Found','data': user_info_dict}, status_code=200)
+    else:
+        return JSONResponse(content={'message':'User not found','data': []}, status_code=404)
+        
+
 
 """
 This API gets all users
 Method: GET
 """
-@app.get('/users')
-def get_users(current_user: str = Depends(get_current_user)):
+@app.get('/users', response_model=List[str])
+def get_users(response: Response,pagination: dict = Depends(get_pagination_params),current_user: str = Depends(get_current_user)):
     data = db.query(Users).all()
     all_users = []
     for user in data:
@@ -306,8 +334,14 @@ def get_users(current_user: str = Depends(get_current_user)):
             "active":user.active
         }
         all_users.append(users_dict)
-    return JSONResponse(content={'message':'data Found','data': all_users}, status_code=200)
-
+    page = pagination["page"]
+    per_page = pagination["per_page"]
+    start = (page - 1) * per_page
+    end = start + per_page
+    if len(all_users) > 0:
+        return JSONResponse(content={'message':'data Found','data': all_users[start:end], 'current_page':str(page) ,'total_pages':int(len(all_users)/10+1)}, status_code=200)
+    else:
+        return JSONResponse(content={'message':'data Found','data': []}, status_code=204)
 
 """
 This API updates user information
