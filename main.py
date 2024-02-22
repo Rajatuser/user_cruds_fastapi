@@ -407,7 +407,7 @@ async def forgot_password(email: EmailSchema) -> JSONResponse:
 """
 This API check if user exists for password change
 """
-@app.post('/authorize_user')
+@app.get('/authorize_user')
 def change_password_page(current_user: str = Depends(get_current_user)):
         return JSONResponse(content={"message":"User Found"}, status_code=200)
     # else:
@@ -423,7 +423,7 @@ def update_user_password(updated_user_password:updated_password,current_user: st
         if user_exists:
             user_exists.password = updated_user_password.password
             db.commit()
-            return JSONResponse(status_code=200, content={"message": "Password Updated Succefully"})
+            return JSONResponse(status_code=200, content={"message": "Password Updated Successfully"})
         else:
             return JSONResponse(status_code=404, content={"message": "User not found"})
                 
