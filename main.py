@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException, status, Body , Query , Response
+from fastapi import Depends, FastAPI, HTTPException, status, Body , Query , Response , Request
 from fastapi.responses import JSONResponse
 from jose import JWTError, jwt
 from fastapi.security import OAuth2PasswordBearer
@@ -17,6 +17,8 @@ from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from htmlTemplates import forgot_template
 import re
 from typing import List
+from fastapi.exceptions import RequestValidationError
+from fastapi.encoders import jsonable_encoder
 
 
 load_dotenv()
@@ -73,8 +75,11 @@ def hash_password(password):
     return pwd_context.hash(password)
 
 def email_exists(user_email):
-    email_ex = db.query(Users).filter_by(email=user_email).first()
-    return email_ex
+    try:
+        email_ex = db.query(Users).filter_by(email=user_email).first()
+        return email_ex
+    except:
+        return None
 
 def authenticate_user(email,password):
     user_identity = email_exists(email)
@@ -110,26 +115,52 @@ async def get_current_user(token: Annotated[str, Depends(oauth2_scheme)]):
 
 ################## Validations #################################
 pattern = re.compile(r'^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,15}$')
+name_pattern =  re.compile(r'^[a-zA-Z]+(?: [a-zA-Z]+)?$')
+email_pattern = re.compile(r'^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,4}$')
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    errors = {}
+    for error in exc.errors():
+        error_message = [msg.strip() for msg in error['msg'].split(',')]
+        if error_message[0] == 'Value error':
+           error_message.pop(0)
+        errors[error['loc'][1]] = error_message
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+        content=jsonable_encoder({"message": {'validation_errors':errors} , 'success':False , 'statusCode' : 422}),
+    )
+
 class Users_cred(BaseModel):
     email: EmailStr
     password: str
     role: str
     active: bool = True
-    name: str = Field(None, pattern=r'^[a-zA-Z]+(?: [a-zA-Z]+)?$', description="Name can only contain alphabets and one space only")
+    name: str = None
     
     @validator("email", pre=True)
     def validate_email(cls, v):
         if not v:
             raise ValueError("Email cannot be empty")
+        if not email_pattern.match(v):
+            raise ValueError("Email format is invalid. Eg.company@domain.com")
         return v
     
     @validator("role")
     def validate_role(cls, v):
         if not v.strip():
             raise ValueError("Role cannot be empty")
+        if ' ' in v:
+            raise ValueError("Spaces are not allowed")
         if v not in {"user", "admin", "superadmin"}:
-            raise ValueError("Invalid role. Allowed values: user, admin, superadmin")
+           raise ValueError("Role should be: user or admin or superadmin")
         return v.strip()
+    
+    @validator("name")
+    def validate_name(cls , v):
+        if not name_pattern.match(v):
+            raise ValueError("Name can only contains alphabets.")
+        return v
     
     @validator("password")
     def validate_password(cls, v):
@@ -156,8 +187,10 @@ class updated_password(BaseModel):
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v or '.' in v:
-            raise ValueError("Password cannot contain spaces and dot")
+        if ' ' in v:
+            raise ValueError("Password cannot contain spaces")
+        if len(v) > 15:
+             raise ValueError("Password length must not exceed 15 characters")
         if not pattern.match(v):
             raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
@@ -174,14 +207,18 @@ class login(BaseModel):
     def validate_email(cls, v):
         if not v:
             raise ValueError("Email cannot be empty")
+        if not email_pattern.match(v):
+            raise ValueError("Email format is invalid. Eg.company@domain.com")
         return v
 
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v or '.' in v:
-            raise ValueError("Password cannot contain spaces and dot")
+        if ' ' in v:
+            raise ValueError("Password cannot contain spaces")
+        if len(v) > 15:
+             raise ValueError("Password length must not exceed 15 characters")
         return v
     class Config:
         extra = Extra.forbid
@@ -201,6 +238,8 @@ class Forgot_password(BaseModel):
     def validate_email(cls, v):
         if not v:
             raise ValueError("Email cannot be empty")
+        if not email_pattern.match(v):
+            raise ValueError("Email format is invalid. Eg.company@domain.com")
         return v
     class Config:
         extra = Extra.forbid
@@ -209,13 +248,21 @@ class Update_user_info(BaseModel):
     email: EmailStr = None
     password: str = None
     role: str = None
-    active: str = None
-
+    active: bool = True
+    name: str = None
 
     @validator("email", pre=True)
     def validate_email(cls, v):
         if not v:
             raise ValueError("Email cannot be empty")
+        if not email_pattern.match(v):
+            raise ValueError("Email format is invalid. Eg.company@domain.com")
+        return v
+
+    @validator("name")
+    def validate_name(cls , v):
+        if not name_pattern.match(v):
+            raise ValueError("Name can only contains alphabets.")
         return v
  
     @root_validator(pre=True)
@@ -231,15 +278,15 @@ class Update_user_info(BaseModel):
         if not v.strip():
             raise ValueError("Role cannot be empty")
         if v not in {"user", "admin", "superadmin"}:
-            raise ValueError("Allowed role values: user, admin, superadmin")
+            raise ValueError("Role should be: user, admin or superadmin")
         return v.strip()
     
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
             raise ValueError("Password cannot be empty")
-        if ' ' in v or '.' in v:
-            raise ValueError("Password cannot contain spaces and dot")
+        if ' ' in v:
+            raise ValueError("Password cannot contain spaces")
         if len(v) > 15:
              raise ValueError("Password length must not exceed 15 characters")
         if not pattern.match(v):
@@ -275,12 +322,12 @@ def register_user(user_credentials: Users_cred = Body()):
             user = Users(**user_credentials.dict(), created_at=datetime.utcnow())
             db.add(user)
             db.commit()
-            return JSONResponse(content={'message':'User registered successfully'}, status_code=201)
+            return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'success':True}, status_code=201)
         else:
-            return JSONResponse(content={'message':'User already exists'}, status_code=403)
+            return JSONResponse(content={'message':'User already exists', 'status_code':403 , 'success':False}, status_code=403)
     except ValidationError as e:
          db.rollback() 
-         return JSONResponse(content={'message':'Server Error'}, status_code=500)
+         return JSONResponse(content={'message':'Server Error', 'status_code':500 , 'success':False}, status_code=500)
     
 """
 This API login user
@@ -290,12 +337,12 @@ Method: POST
 def login_user(login_creds: Annotated[login, Body()]) -> Token:
     authenticate_current_user = authenticate_user(login_creds.email, login_creds.password)
     if not authenticate_current_user:
-        return JSONResponse(content={"message":"User credentials are incorrect"}, status_code=404)
+        return JSONResponse(content={"message":"User credentials are incorrect" ,'status_code':404 , 'success':False}, status_code=404)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
     )
-    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer"},status_code=200)
+    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer",'status_code':200 , 'success':True},status_code=200)
 
 
 """
@@ -312,9 +359,9 @@ def user_information(current_user: str = Depends(get_current_user)):
                 "role":user_info.role,
                 "active":user_info.active
         }
-        return JSONResponse(content={'message':'User Found','data': user_info_dict}, status_code=200)
+        return JSONResponse(content={'message':'data Found','data': user_info_dict, 'status_code':200 , 'success':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'User not found','data': []}, status_code=404)
+        return JSONResponse(content={'message':'no data found','data': [],'status_code':204 , 'success':True}, status_code=404)
         
 
 
@@ -338,10 +385,11 @@ def get_users(response: Response,pagination: dict = Depends(get_pagination_param
     per_page = pagination["per_page"]
     start = (page - 1) * per_page
     end = start + per_page
-    if len(all_users) > 0:
-        return JSONResponse(content={'message':'data Found','data': all_users[start:end], 'current_page':str(page) ,'total_pages':int(len(all_users)/10+1)}, status_code=200)
+    if len(all_users[start:end]) > 0:
+        return JSONResponse(content={'message':'data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':200 , 'success':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'data Found','data': []}, status_code=204)
+        return JSONResponse(content={'message':'no data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':404 , 'success':False}, status_code=404)
+
 
 """
 This API updates user information
@@ -363,10 +411,10 @@ def update_user(user_id: int, update_credentials: Update_user_info = Body(),curr
         if update_credentials.active is not None:
             user_exists.active = bool(update_credentials.active)
         db.commit()
-        return JSONResponse(content={'message':'User updated successfully'}, status_code=200)
+        return JSONResponse(content={'message':'User updated successfully','status_code':200 , 'success':True}, status_code=200)
     else:
         db.rollback() 
-        return JSONResponse(content={'message':'User not found'}, status_code=404)
+        return JSONResponse(content={'message':'User not found', 'status_code':404 , 'success':False}, status_code=404)
 
 """
 This API deletes user
@@ -377,9 +425,9 @@ def delete_user(user_id:int,current_user: str = Depends(get_current_user)):
     if user_exists is not None:
         db.delete(user_exists)
         db.commit()
-        return JSONResponse(content={'message':'User deleted successfully'}, status_code=200)
+        return JSONResponse(content={'message':'User deleted successfully','status_code':200 , 'success':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'User not found'}, status_code=404)
+        return JSONResponse(content={'message':'User not found', 'status_code':404 , 'success':False}, status_code=404)
 
 
 """
@@ -401,7 +449,7 @@ async def forgot_password(email: EmailSchema) -> JSONResponse:
 
     fm = FastMail(conf)
     await fm.send_message(message)
-    return JSONResponse(status_code=200, content={"message": "Reset Link is sent on your email."})
+    return JSONResponse(status_code=200, content={"message": "Reset Link is sent on your email.",'status_code':200 , 'success':True})
 
 
 """
@@ -409,7 +457,7 @@ This API check if user exists for password change
 """
 @app.get('/authorize_user')
 def change_password_page(current_user: str = Depends(get_current_user)):
-        return JSONResponse(content={"message":"User Found"}, status_code=200)
+        return JSONResponse(content={"message":"User Found", 'status_code':200 , 'success':True}, status_code=200)
     # else:
     #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
 
@@ -423,9 +471,9 @@ def update_user_password(updated_user_password:updated_password,current_user: st
         if user_exists:
             user_exists.password = updated_user_password.password
             db.commit()
-            return JSONResponse(status_code=200, content={"message": "Password Updated Successfully"})
+            return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
         else:
-            return JSONResponse(status_code=404, content={"message": "User not found"})
+            return JSONResponse(status_code=404, content={"message": "User not found", 'status_code':404 , 'success':False})
                 
     
 
