@@ -360,7 +360,7 @@ Method: POST
 def login_user(login_creds: Annotated[login, Body()]) -> Token:
     authenticate_current_user = authenticate_user(login_creds.email, login_creds.password)
     if not authenticate_current_user:
-        return JSONResponse(content={"message":{'validation_errors':{'credentials':["User credentials are incorrect"]}},'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message":{'validation_errors':["User credentials are incorrect"]},'status_code':404 , 'success':False}, status_code=404)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
@@ -386,7 +386,6 @@ def user_information(current_user: str = Depends(get_current_user)):
     else:
         return JSONResponse(content={'message':'no data found','data': [],'status_code':204 , 'success':True}, status_code=404)
         
-
 
 """
 This API gets all users
