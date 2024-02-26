@@ -538,7 +538,7 @@ def update_user_password(change_password:change_password,current_user: str = Dep
                     db.commit()
                     return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
         else:
-             return JSONResponse(status_code=401, content={"message":["Old password is incorrect."], 'status_code':401 , 'success':False})
+             return JSONResponse(status_code=401, content={"message":{"authorization_error":["Old password is incorrect."]}, 'status_code':401 , 'success':False})
     else:
         return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
 
