@@ -200,6 +200,32 @@ class updated_password(BaseModel):
     def hash_password(cls, v):
         return hash_password(v)
 
+class change_password(BaseModel):
+    old_password: str
+    new_password: str
+
+    @validator("old_password")
+    def validate_old_password(cls, v):
+        if not v.strip():
+            raise ValueError("Old Password cannot be empty")
+        return v
+
+    @validator("new_password")
+    def validate_password(cls, v):
+        if not v.strip():
+            raise ValueError("New password cannot be empty")
+        if ' ' in v:
+            raise ValueError("New Password cannot contain spaces")
+        if len(v) > 15:
+             raise ValueError("New Password length must not exceed 15 characters")
+        if not pattern.match(v):
+            raise ValueError("New Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
+        return v
+    
+    @validator("new_password")
+    def hash_password(cls, v):
+        return hash_password(v)
+
 class login(BaseModel):
     email: EmailStr
     password: str
@@ -484,7 +510,7 @@ def change_password_page(current_user: str = Depends(get_current_user)):
     #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
 
 """
-This API changes password
+This API updates password
 """
 @app.post('/update_password')
 def update_user_password(updated_user_password:updated_password,current_user: str = Depends(get_current_user)):
@@ -497,7 +523,23 @@ def update_user_password(updated_user_password:updated_password,current_user: st
         else:
             return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
                 
-    
 
+"""
+This API changes password
+"""
+@app.post('/change_password')
+def update_user_password(change_password:change_password,current_user: str = Depends(get_current_user)):
+    user_exists = db.query(Users).filter_by(email=current_user).first()
+    if user_exists:
+        old_password_verify = verify_password(change_password.old_password, user_exists.password)
+        if old_password_verify:
+            if change_password.new_password is not None:
+                    user_exists.password = change_password.new_password
+                    db.commit()
+                    return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
+        else:
+             return JSONResponse(status_code=401, content={"message":["Old password is incorrect."], 'status_code':401 , 'success':False})
+    else:
+        return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
 
 
