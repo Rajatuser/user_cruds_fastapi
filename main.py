@@ -347,7 +347,7 @@ def register_user(user_credentials: Users_cred = Body()):
             db.commit()
             return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'success':True}, status_code=201)
         else:
-            return JSONResponse(content={'message':'User already exists', 'status_code':409 , 'success':False}, status_code=409)
+            return JSONResponse(content={'message':{'validation_errors':{'email':['The email has already been taken']}}, 'status_code':409 , 'success':False}, status_code=409)
     except ValidationError as e:
          db.rollback() 
          return JSONResponse(content={'message':'Server Error', 'status_code':500 , 'success':False}, status_code=500)
@@ -360,7 +360,7 @@ Method: POST
 def login_user(login_creds: Annotated[login, Body()]) -> Token:
     authenticate_current_user = authenticate_user(login_creds.email, login_creds.password)
     if not authenticate_current_user:
-        return JSONResponse(content={"message":"User credentials are incorrect" ,'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message":{'validation_errors':{'credentials':["User credentials are incorrect"]}},'status_code':404 , 'success':False}, status_code=404)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
@@ -425,7 +425,7 @@ def update_user(user_id: int, update_credentials: Update_user_info = Body(),curr
         if update_credentials.email is not None:
             email_exists = db.query(Users).filter_by(email=update_credentials.email).first()
             if email_exists:
-                return JSONResponse(content={'message':'Email already exists'}, status_code=409)
+                return JSONResponse(content={'message':{'validation_errors':{'email':['The email has already been taken']}}}, status_code=409)
             user_exists.email = update_credentials.email
         if update_credentials.password is not None:
             user_exists.password = hash_password(update_credentials.password)
@@ -437,7 +437,7 @@ def update_user(user_id: int, update_credentials: Update_user_info = Body(),curr
         return JSONResponse(content={'message':'User updated successfully','status_code':200 , 'success':True}, status_code=200)
     else:
         db.rollback() 
-        return JSONResponse(content={'message':'User not found', 'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message": {"validation_errors":{"id":["User not found"]}}, 'status_code':404 , 'success':False}, status_code=404)
 
 """
 This API deletes user
@@ -450,7 +450,7 @@ def delete_user(user_id:int,current_user: str = Depends(get_current_user)):
         db.commit()
         return JSONResponse(content={'message':'User deleted successfully','status_code':200 , 'success':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'User not found', 'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message": {"validation_errors":{"id":["User not found"]}}, 'status_code':404 , 'success':False}, status_code=404)
 
 
 """
@@ -496,7 +496,7 @@ def update_user_password(updated_user_password:updated_password,current_user: st
             db.commit()
             return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
         else:
-            return JSONResponse(status_code=404, content={"message": "User not found", 'status_code':404 , 'success':False})
+            return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
                 
     
 
