@@ -135,6 +135,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 class Users_cred(BaseModel):
     email: EmailStr
     password: str
+    confirm_password: str
     role: str
     active: bool = True
     name: str = None
@@ -175,6 +176,14 @@ class Users_cred(BaseModel):
             raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
     
+    @validator("confirm_password")
+    def validate_confirm_password(cls, v, values):
+        if not v.strip():
+            raise ValueError("Confirm Password cannot be empty")
+        if not verify_password(v ,values['password']):
+            raise ValueError("Password and Confirm Password must be equal")
+        return v
+
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
@@ -183,6 +192,7 @@ class Users_cred(BaseModel):
 
 class updated_password(BaseModel):
     password: str
+    confirm_password: str
 
     @validator("password")
     def validate_password(cls, v):
@@ -196,6 +206,14 @@ class updated_password(BaseModel):
             raise ValueError("Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
         return v
     
+    @validator("confirm_password")
+    def validate_confirm_password(cls, v, values):
+        if not v.strip():
+            raise ValueError("Confirm Password cannot be empty")
+        if not verify_password(v ,values['password']):
+            raise ValueError("Password and Confirm Password must be equal")
+        return v
+
     @validator("password")
     def hash_password(cls, v):
         return hash_password(v)
@@ -203,6 +221,7 @@ class updated_password(BaseModel):
 class change_password(BaseModel):
     old_password: str
     new_password: str
+    confirm_password: str
 
     @validator("old_password")
     def validate_old_password(cls, v):
@@ -220,6 +239,14 @@ class change_password(BaseModel):
              raise ValueError("New Password length must not exceed 15 characters")
         if not pattern.match(v):
             raise ValueError("New Password must be 8 characters long and contain at least one uppercase, one lowercase, one number, and one special character")
+        return v
+
+    @validator("confirm_password")
+    def validate_confirm_password(cls, v, values):
+        if not v.strip():
+            raise ValueError("Confirm Password cannot be empty")
+        if not verify_password(v ,values['new_password']):
+            raise ValueError("Password and Confirm Password must be equal")
         return v
     
     @validator("new_password")
