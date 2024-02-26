@@ -347,7 +347,7 @@ def register_user(user_credentials: Users_cred = Body()):
             db.commit()
             return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'success':True}, status_code=201)
         else:
-            return JSONResponse(content={'message':'User already exists', 'status_code':403 , 'success':False}, status_code=403)
+            return JSONResponse(content={'message':'User already exists', 'status_code':409 , 'success':False}, status_code=409)
     except ValidationError as e:
          db.rollback() 
          return JSONResponse(content={'message':'Server Error', 'status_code':500 , 'success':False}, status_code=500)
