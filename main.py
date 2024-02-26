@@ -31,11 +31,6 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 ####### Email Configurations######
-class EmailSchema(BaseModel):
-    email: List[EmailStr]
-
-    class Config:
-        extra = Extra.forbid
 
 conf = ConnectionConfig(
     MAIL_USERNAME = str(os.getenv('MAIL_FROM')),
@@ -125,7 +120,13 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
         error_message = [msg.strip() for msg in error['msg'].split(',')]
         if error_message[0] == 'Value error':
            error_message.pop(0)
-        errors[error['loc'][1]] = error_message
+           errors[error['loc'][1]] = error_message
+        elif error['type'] == 'extra_forbidden':
+            errors[error['loc'][1]] = ["Extra fields are not allowed"]
+        elif error['type'] == 'missing':
+            errors[error['loc'][1]] = f"{error['loc'][1]} field is required"
+        else:
+            errors[error['loc'][1]] = error_message
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content=jsonable_encoder({"message": {'validation_errors':errors} , 'success':False , 'statusCode' : 422}),
@@ -153,7 +154,7 @@ class Users_cred(BaseModel):
         if ' ' in v:
             raise ValueError("Spaces are not allowed")
         if v not in {"user", "admin", "superadmin"}:
-           raise ValueError("Role should be: user or admin or superadmin")
+           raise ValueError("Please select atleast one role: user or admin or superadmin")
         return v.strip()
     
     @validator("name")
@@ -206,7 +207,7 @@ class login(BaseModel):
     @validator("email", pre=True)
     def validate_email(cls, v):
         if not v:
-            raise ValueError("Email cannot be empty")
+            raise ValueError("Email is required")
         if not email_pattern.match(v):
             raise ValueError("Email format is invalid. Eg.company@domain.com")
         return v
@@ -214,7 +215,7 @@ class login(BaseModel):
     @validator("password")
     def validate_password(cls, v):
         if not v.strip():
-            raise ValueError("Password cannot be empty")
+            raise ValueError("Password is required")
         if ' ' in v:
             raise ValueError("Password cannot contain spaces")
         if len(v) > 15:
@@ -222,7 +223,6 @@ class login(BaseModel):
         return v
     class Config:
         extra = Extra.forbid
-
 
 class Token(BaseModel):
     access_token: str
@@ -241,6 +241,25 @@ class Forgot_password(BaseModel):
         if not email_pattern.match(v):
             raise ValueError("Email format is invalid. Eg.company@domain.com")
         return v
+    class Config:
+        extra = Extra.forbid
+
+class EmailSchema(BaseModel):
+    email: List[EmailStr]
+
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not isinstance(v , List):
+            raise ValueError("Email should be in List.")
+        if len(v) == 0:
+            raise ValueError("Email cannot be empty")
+        for emails in v:
+            if len(emails) == 0:
+                raise ValueError("Empty emails are not allowed")
+            if not email_pattern.match(emails):
+                raise ValueError("Email format is invalid.")
+        return v
+
     class Config:
         extra = Extra.forbid
 
@@ -278,7 +297,7 @@ class Update_user_info(BaseModel):
         if not v.strip():
             raise ValueError("Role cannot be empty")
         if v not in {"user", "admin", "superadmin"}:
-            raise ValueError("Role should be: user, admin or superadmin")
+            raise ValueError("Please select atleast one role: user or admin or superadmin")
         return v.strip()
     
     @validator("password")
@@ -299,15 +318,19 @@ class Update_user_info(BaseModel):
     
     class Config:
         extra = Extra.forbid
+        
 
 
 
 ###################### User API's ###########################
         
+
 def get_pagination_params(
-    page: int = Query(1, gt=0),
+    page: Union[int, str] = None ,
     per_page: int = Query(10, gt=0)
 ):
+    if not page:
+        page = 1
     return {"page": page, "per_page": per_page}
 
 """
