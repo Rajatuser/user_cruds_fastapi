@@ -5,7 +5,7 @@ from fastapi.security import OAuth2PasswordBearer
 from passlib.context import CryptContext
 from pydantic import BaseModel, ValidationError, validator, EmailStr, root_validator, Extra, Field
 from typing import List, Union
-from database_connections.models import Users
+from database_connections.models import User , ForgotPasswordToken
 from database_connections.connection import *
 from fastapi.middleware.cors import CORSMiddleware
 from database_connections.models import *
@@ -16,10 +16,10 @@ import os
 from fastapi_mail import ConnectionConfig, FastMail, MessageSchema, MessageType
 from htmlTemplates import forgot_template
 import re
-from typing import List
+from typing import List, Optional
 from fastapi.exceptions import RequestValidationError
 from fastapi.encoders import jsonable_encoder
-
+import uuid
 
 load_dotenv()
 
@@ -71,7 +71,7 @@ def hash_password(password):
 
 def email_exists(user_email):
     try:
-        email_ex = db.query(Users).filter_by(email=user_email).first()
+        email_ex = db.query(User).filter_by(email=user_email).first()
         return email_ex
     except:
         return None
@@ -118,18 +118,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = {}
     for error in exc.errors():
         error_message = [msg.strip() for msg in error['msg'].split(',')]
+        print(error_message , "################")
         if error_message[0] == 'Value error':
            error_message.pop(0)
            errors[error['loc'][1]] = error_message
         elif error['type'] == 'extra_forbidden':
             errors[error['loc'][1]] = ["Extra fields are not allowed"]
         elif error['type'] == 'missing':
-            errors[error['loc'][1]] = f"{error['loc'][1]} field is required"
+            errors[error['loc'][1]] = [f"{error['loc'][1]} is required"]
         else:
             errors[error['loc'][1]] = error_message
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-        content=jsonable_encoder({"message": {'validation_errors':errors} , 'success':False , 'statusCode' : 422}),
+        content=jsonable_encoder({"message":"validation_errors",'errors':errors, 'status':False , 'statusCode' : 422}),
     )
 
 class Users_cred(BaseModel):
@@ -160,6 +161,8 @@ class Users_cred(BaseModel):
     
     @validator("name")
     def validate_name(cls , v):
+        if not v.strip():
+            raise ValueError("Name cannot be empty.")
         if not name_pattern.match(v):
             raise ValueError("Name can only contains alphabets.")
         return v
@@ -191,8 +194,24 @@ class Users_cred(BaseModel):
         extra = Extra.forbid
 
 class updated_password(BaseModel):
+    token: str
+    email: EmailStr
     password: str
     confirm_password: str
+
+    @validator("token")
+    def validate_token(cls , v):
+        if not v.strip():
+            raise ValueError("Token cannot be empty")
+        return v
+    
+    @validator("email", pre=True)
+    def validate_email(cls, v):
+        if not v:
+            raise ValueError("Email cannot be empty")
+        if not email_pattern.match(v):
+            raise ValueError("Email format is invalid. Eg.company@domain.com")
+        return v
 
     @validator("password")
     def validate_password(cls, v):
@@ -210,8 +229,9 @@ class updated_password(BaseModel):
     def validate_confirm_password(cls, v, values):
         if not v.strip():
             raise ValueError("Confirm Password cannot be empty")
-        if not verify_password(v ,values['password']):
-            raise ValueError("Password and Confirm Password must be equal")
+        if 'password' in values.keys():
+            if not verify_password(v ,values['password']):
+                raise ValueError("Password and Confirm Password must be equal")
         return v
 
     @validator("password")
@@ -333,13 +353,15 @@ class Update_user_info(BaseModel):
 
     @validator("name")
     def validate_name(cls , v):
+        if not v.strip():
+            raise ValueError("Name cannot be empty.")
         if not name_pattern.match(v):
             raise ValueError("Name can only contains alphabets.")
         return v
  
     @root_validator(pre=True)
     def at_least_one_field_required(cls, values):
-        required_fields = ["email", "password", "role", "active"]
+        required_fields = ["email", "password", "role", "active", "name"]
         present_fields = [field for field in required_fields if values.get(field) is not None]
         if not present_fields:
             raise ValueError(f"At least one of {required_fields} is required")
@@ -379,55 +401,60 @@ class Update_user_info(BaseModel):
         
 
 def get_pagination_params(
-    page: Union[int, str] = None ,
+    page: Optional[Union[int, str]] = None,
     per_page: int = Query(10, gt=0)
 ):
-    if not page:
+    if page == "" or not page:
         page = 1
-    return {"page": page, "per_page": per_page}
+    elif isinstance(page , str):
+        try:
+            page = int(page)
+        except:
+            page = 1
+    return {"page": int(page), "per_page": per_page}
 
 """
 This API creates user
 Method: POST
 """
-@app.post('/register_user')
+@app.post('/api/v1/users')
 def register_user(user_credentials: Users_cred = Body()):
     try:
-        user_exists = db.query(Users).filter_by(email=user_credentials.email).first()
+        user_exists = db.query(User).filter_by(email=user_credentials.email).first()
         if user_exists is None:
-            user = Users(**user_credentials.dict(), created_at=datetime.utcnow())
+            user = User(**user_credentials.dict(), created_at=datetime.utcnow())
             db.add(user)
             db.commit()
-            return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'success':True}, status_code=201)
+            return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'status':True}, status_code=201)
         else:
-            return JSONResponse(content={'message':{'validation_errors':{'email':['The email has already been taken']}}, 'status_code':409 , 'success':False}, status_code=409)
+            return JSONResponse(content={'message':'validation_errors','errors':{'email':['The email has already been taken']}, 'status_code':409 , 'status':False}, status_code=409)
     except ValidationError as e:
          db.rollback() 
-         return JSONResponse(content={'message':'Server Error', 'status_code':500 , 'success':False}, status_code=500)
+         return JSONResponse(content={'message':'Server Error', 'status_code':500 , 'status':False}, status_code=500)
     
 """
 This API login user
 Method: POST
 """
-@app.post('/login')
+@app.post('/api/v1/login')
 def login_user(login_creds: Annotated[login, Body()]) -> Token:
     authenticate_current_user = authenticate_user(login_creds.email, login_creds.password)
     if not authenticate_current_user:
-        return JSONResponse(content={"message":{'validation_errors':["User credentials are incorrect"]},'status_code':401 , 'success':False}, status_code=401)
+        return JSONResponse(content={"message":'validation_errors',"errors":["User credentials are incorrect"],'status_code':401 , 'status':False}, status_code=401)
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": authenticate_current_user.email}, expires_delta=access_token_expires
     )
-    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer",'status_code':200 , 'success':True},status_code=200)
+    return JSONResponse(content={"message":"Login Success","token":access_token,"token_type":"bearer",'status_code':200 , 'status':True},status_code=200)
 
 
 """
 This API get user information
 METHOD: POST
 """
-@app.get('/user_info')
+@app.get('/api/v1/user-profile')
 def user_information(current_user: str = Depends(get_current_user)):
-    user_info = db.query(Users).filter_by(email=current_user).first()
+    user_info = db.query(User).filter_by(email=current_user).first()
     if user_info:
         user_info_dict = {
                 "id":user_info.id,
@@ -435,23 +462,24 @@ def user_information(current_user: str = Depends(get_current_user)):
                 "role":user_info.role,
                 "active":user_info.active
         }
-        return JSONResponse(content={'message':'data Found','data': user_info_dict, 'status_code':200 , 'success':True}, status_code=200)
+        return JSONResponse(content={'message':'data Found','data': user_info_dict, 'status_code':200 , 'status':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'no data found','data': [],'status_code':204 , 'success':True}, status_code=404)
+        return JSONResponse(content={'message':'no data found','data': [],'status_code':204 , 'status':True}, status_code=204)
         
 
 """
 This API gets all users
 Method: GET
 """
-@app.get('/users', response_model=List[str])
+@app.get('/api/v1/users', response_model=List[str])
 def get_users(response: Response,pagination: dict = Depends(get_pagination_params),current_user: str = Depends(get_current_user)):
-    data = db.query(Users).all()
+    data = db.query(User).all()
     all_users = []
     for user in data:
         users_dict = {
             "id":user.id,
             "email":user.email,
+            "name":user.name,
             "role":user.role,
             "active":user.active
         }
@@ -461,112 +489,120 @@ def get_users(response: Response,pagination: dict = Depends(get_pagination_param
     start = (page - 1) * per_page
     end = start + per_page
     if len(all_users[start:end]) > 0:
-        return JSONResponse(content={'message':'data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':200 , 'success':True}, status_code=200)
+        return JSONResponse(content={'message':'data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':200 , 'status':True}, status_code=200)
     else:
-        return JSONResponse(content={'message':'no data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={'message':'no data Found','data': all_users[start:end], 'current_page':page ,'total_pages':int(len(all_users)/10+1),'status_code':404 , 'status':False}, status_code=404)
 
 
 """
 This API updates user information
 METHOD: PATCH
 """
-@app.patch('/update_user_info/{user_id}')
-def update_user(user_id: int, update_credentials: Update_user_info = Body(),current_user: str = Depends(get_current_user)):
-    user_exists = db.query(Users).get(user_id)
+@app.patch('/api/v1/users/{id}')
+def update_user(id: int, update_credentials: Update_user_info = Body(),current_user: str = Depends(get_current_user)):
+    user_exists = db.query(User).get(id)
     if user_exists is not None:
         if update_credentials.email is not None:
-            email_exists = db.query(Users).filter_by(email=update_credentials.email).first()
+            email_exists = db.query(User).filter_by(email=update_credentials.email).first()
             if email_exists:
                 return JSONResponse(content={'message':{'validation_errors':{'email':['The email has already been taken']}}}, status_code=409)
             user_exists.email = update_credentials.email
         if update_credentials.password is not None:
             user_exists.password = hash_password(update_credentials.password)
+        if update_credentials.name is not None:
+            user_exists.name = update_credentials.name
         if update_credentials.role is not None:
             user_exists.role = update_credentials.role
         if update_credentials.active is not None:
             user_exists.active = bool(update_credentials.active)
         db.commit()
-        return JSONResponse(content={'message':'User updated successfully','status_code':200 , 'success':True}, status_code=200)
+        return JSONResponse(content={'message':'User updated successfully','status_code':200 , 'status':True}, status_code=200)
     else:
         db.rollback() 
-        return JSONResponse(content={"message": {"validation_errors":{"id":["User not found"]}}, 'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message":"validation_errors", 'errors':{"id":["User not found"]}, 'status_code':404 , 'status':False}, status_code=404)
 
 """
 This API deletes user
 """
-@app.delete('/delete_user/{user_id}')
-def delete_user(user_id:int,current_user: str = Depends(get_current_user)):
-    user_exists = db.query(Users).get(user_id)
+@app.delete('/api/v1/users/{id}')
+def delete_user(id:int,current_user: str = Depends(get_current_user)):
+    user_exists = db.query(User).get(id)
     if user_exists is not None:
         db.delete(user_exists)
         db.commit()
-        return JSONResponse(content={'message':'User deleted successfully','status_code':200 , 'success':True}, status_code=200)
+        return JSONResponse(content={'message':'User deleted successfully','status_code':200 , 'status':True}, status_code=200)
     else:
-        return JSONResponse(content={"message": {"validation_errors":{"id":["User not found"]}}, 'status_code':404 , 'success':False}, status_code=404)
+        return JSONResponse(content={"message":"validation_errors","errors":{"id":["User not found"]}, 'status_code':404 , 'status':False}, status_code=404)
 
 
 """
 Forgot password API
 """
-@app.post('/forgot_password')
+@app.post('/api/v1/password/forgot')
 async def forgot_password(email: EmailSchema) -> JSONResponse:
-    html = forgot_template()
-    access_token_expires = timedelta(minutes=10)
-    access_token = create_access_token(
-        data={"sub": email.dict().get("email")[0]}, expires_delta=access_token_expires
-    )
-    updated_template = html.replace('{email}',email.dict().get("email")[0]).replace('{change_password_link}',f"{os.getenv('CHANGE_PASSWORD_ENDPOINT')}/changePassword/{access_token}")
-    message = MessageSchema(
-        subject="Password Reset",
-        recipients=email.dict().get("email"),
-        body=updated_template,
-        subtype=MessageType.html)
+    user_exists = db.query(User).filter_by(email=email.dict().get("email")[0]).first()
+    if user_exists:
+        html = forgot_template()
+        forgot_token = uuid.uuid4().hex
+        updated_template = html.replace('{email}',email.dict().get("email")[0]).replace('{change_password_link}',f"{os.getenv('CHANGE_PASSWORD_ENDPOINT')}/changePassword?token={forgot_token}")
+        message = MessageSchema(
+            subject="Password Reset",
+            recipients=email.dict().get("email"),
+            body=updated_template,
+            subtype=MessageType.html)
+        fm = FastMail(conf)
+        await fm.send_message(message)
+        save_token = ForgotPasswordToken(user_email=user_exists.email,token=forgot_token)
+        db.add(save_token)
+        db.commit()
+        return JSONResponse(status_code=200, content={"message": "Reset Link is sent on your email.",'status_code':200 , 'status':True})
+    else:
+         return JSONResponse(status_code=200, content={"message":"validation_errors","errors":{'email':["Email didn't exists."]},'status_code':200 , 'status':True})
+    
 
-    fm = FastMail(conf)
-    await fm.send_message(message)
-    return JSONResponse(status_code=200, content={"message": "Reset Link is sent on your email.",'status_code':200 , 'success':True})
 
-
-"""
-This API check if user exists for password change
-"""
-@app.get('/authorize_user')
-def change_password_page(current_user: str = Depends(get_current_user)):
-        return JSONResponse(content={"message":"User Found", 'status_code':200 , 'success':True}, status_code=200)
-    # else:
-    #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
+# """
+# This API check if user exists for password change
+# """
+# @app.get('/authorize_user')
+# def change_password_page(current_user: str = Depends(get_current_user)):
+#         return JSONResponse(content={"message":"User Found", 'status_code':200 , 'status':True}, status_code=200)
+#     # else:
+#     #     return JSONResponse(content={"message":"User not Found"}, status_code=200)
 
 """
 This API updates password
 """
-@app.post('/update_password')
-def update_user_password(updated_user_password:updated_password,current_user: str = Depends(get_current_user)):
-    if updated_user_password.password is not None:
-        user_exists = db.query(Users).filter_by(email=current_user).first()
-        if user_exists:
+@app.post('/api/v1/password/reset')
+def update_user_password(updated_user_password:updated_password):
+        token_exists = db.query(ForgotPasswordToken).filter_by(user_email=updated_user_password.email, token = updated_user_password.token).first()
+        if token_exists:
+            user_exists = db.query(User).filter_by(email=updated_user_password.email).first()
             user_exists.password = updated_user_password.password
             db.commit()
-            return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
+            db.delete(token_exists)  # Delete the token
+            db.commit()
+            return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'status':True})
         else:
-            return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
+            return JSONResponse(status_code=401, content={"message":"validation_errors","errors":["Invalid email or token."], 'status_code':401 , 'status':False})
                 
 
 """
 This API changes password
 """
-@app.post('/change_password')
+@app.post('/api/v1/password/change')
 def update_user_password(change_password:change_password,current_user: str = Depends(get_current_user)):
-    user_exists = db.query(Users).filter_by(email=current_user).first()
+    user_exists = db.query(User).filter_by(email=current_user).first()
     if user_exists:
         old_password_verify = verify_password(change_password.old_password, user_exists.password)
         if old_password_verify:
             if change_password.new_password is not None:
                     user_exists.password = change_password.new_password
                     db.commit()
-                    return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'success':True})
+                    return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'status':True})
         else:
-             return JSONResponse(status_code=401, content={"message":{"authorization_error":["Old password is incorrect."]}, 'status_code':401 , 'success':False})
+             return JSONResponse(status_code=401, content={"message":{"authorization_error":["Old password is incorrect."]}, 'status_code':401 , 'status':False})
     else:
-        return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'success':False})
+        return JSONResponse(status_code=404, content={"message": {"validation_errors":{"email":["User not found"]}}, 'status_code':404 , 'status':False})
 
 
