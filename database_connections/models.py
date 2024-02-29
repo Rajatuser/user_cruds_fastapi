@@ -20,7 +20,7 @@ class ForgotPasswordToken(Base):
     id = Column(Integer, primary_key=True)
     user_email = Column(String(120), ForeignKey('users.email'), nullable=False)
     token = Column(String(255), unique=True, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.now)
 
 
 Base.metadata.create_all(bind=engine)

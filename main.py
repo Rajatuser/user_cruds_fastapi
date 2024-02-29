@@ -577,11 +577,19 @@ This API updates password
 def update_user_password(updated_user_password:updated_password):
         token_exists = db.query(ForgotPasswordToken).filter_by(user_email=updated_user_password.email, token = updated_user_password.token).first()
         if token_exists:
-            user_exists = db.query(User).filter_by(email=updated_user_password.email).first()
-            user_exists.password = updated_user_password.password
-            db.commit()
-            db.delete(token_exists)  # Delete the token
-            db.commit()
+            given_time = datetime.strptime(str(token_exists.created_at), "%Y-%m-%d %H:%M:%S")
+            current_time = datetime.now()
+            time_difference = current_time - given_time
+            if time_difference.total_seconds() > 60 * 60:
+                db.delete(token_exists)
+                db.commit()
+                return JSONResponse(status_code=401, content={"message":"validation_errors","errors":["Invalid email or token."], 'status_code':401 , 'status':False})
+            else:
+                user_exists = db.query(User).filter_by(email=updated_user_password.email).first()
+                user_exists.password = updated_user_password.password
+                db.commit()
+                db.delete(token_exists) 
+                db.commit()
             return JSONResponse(status_code=200, content={"message": "Password Updated Successfully", 'status_code':200 , 'status':True})
         else:
             return JSONResponse(status_code=401, content={"message":"validation_errors","errors":["Invalid email or token."], 'status_code':401 , 'status':False})
