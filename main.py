@@ -495,6 +495,27 @@ def get_users(response: Response,pagination: dict = Depends(get_pagination_param
 
 
 """
+This API gets users by id
+Method: GET
+"""
+@app.get('/api/v1/users/{id}')
+def get_user(id:int,current_user: str = Depends(get_current_user)):
+    data = db.query(User).get(id)
+    if data is not None:
+        users_dict = {
+            "id":data.id,
+            "email":data.email,
+            "name":data.name,
+            "role":data.role,
+            "active":data.active
+        }
+        return JSONResponse(content={'message':'data Found','data':users_dict,'status_code':200 , 'status':True}, status_code=200)
+    else:
+        return JSONResponse(content={"message":"validation_errors", 'errors':{"id":["User not found"]}, 'status_code':404 , 'status':False}, status_code=404)
+
+
+
+"""
 This API updates user information
 METHOD: PATCH
 """
