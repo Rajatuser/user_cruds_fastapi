@@ -182,8 +182,9 @@ class Users_cred(BaseModel):
     def validate_confirm_password(cls, v, values):
         if not v.strip():
             raise ValueError("Confirm Password cannot be empty")
-        if not verify_password(v ,values['password']):
-            raise ValueError("Password and Confirm Password must be equal")
+        if 'password' in values.keys():
+            if not verify_password(v ,values['password']):
+                raise ValueError("Password and Confirm Password must be equal")
         return v
 
     @validator("password")
@@ -264,8 +265,9 @@ class change_password(BaseModel):
     def validate_confirm_password(cls, v, values):
         if not v.strip():
             raise ValueError("Confirm Password cannot be empty")
-        if not verify_password(v ,values['new_password']):
-            raise ValueError("Password and Confirm Password must be equal")
+        if 'password' in values.keys():
+            if not verify_password(v ,values['password']):
+                raise ValueError("Password and Confirm Password must be equal")
         return v
     
     @validator("new_password")
