@@ -146,7 +146,7 @@ class Users_cred(BaseModel):
         if not v:
             raise ValueError("Email cannot be empty")
         if not email_pattern.match(v):
-            raise ValueError("Email format is invalid. Eg.company@domain.com")
+            raise ValueError("Email format is invalid.")
         return v
     
     @validator("role")
@@ -210,7 +210,7 @@ class updated_password(BaseModel):
         if not v:
             raise ValueError("Email cannot be empty")
         if not email_pattern.match(v):
-            raise ValueError("Email format is invalid. Eg.company@domain.com")
+            raise ValueError("Email format is invalid.")
         return v
 
     @validator("password")
@@ -282,7 +282,7 @@ class login(BaseModel):
         if not v:
             raise ValueError("Email is required")
         if not email_pattern.match(v):
-            raise ValueError("Email format is invalid. Eg.company@domain.com")
+            raise ValueError("Email format is invalid.")
         return v
 
     @validator("password")
@@ -312,7 +312,7 @@ class Forgot_password(BaseModel):
         if not v:
             raise ValueError("Email cannot be empty")
         if not email_pattern.match(v):
-            raise ValueError("Email format is invalid. Eg.company@domain.com")
+            raise ValueError("Email format is invalid.")
         return v
     class Config:
         extra = Extra.forbid
@@ -348,7 +348,7 @@ class Update_user_info(BaseModel):
         if not v:
             raise ValueError("Email cannot be empty")
         if not email_pattern.match(v):
-            raise ValueError("Email format is invalid. Eg.company@domain.com")
+            raise ValueError("Email format is invalid.")
         return v
 
     @validator("name")
@@ -512,7 +512,6 @@ def get_user(id:int,current_user: str = Depends(get_current_user)):
         return JSONResponse(content={'message':'data Found','data':users_dict,'status_code':200 , 'status':True}, status_code=200)
     else:
         return JSONResponse(content={"message":"validation_errors", 'errors':{"id":["User not found"]}, 'status_code':404 , 'status':False}, status_code=404)
-
 
 
 """
