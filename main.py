@@ -118,7 +118,6 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     errors = {}
     for error in exc.errors():
         error_message = [msg.strip() for msg in error['msg'].split(',')]
-        print(error_message , "################")
         if error_message[0] == 'Value error':
            error_message.pop(0)
            errors[error['loc'][1]] = error_message
@@ -421,8 +420,9 @@ Method: POST
 def register_user(user_credentials: Users_cred = Body()):
     try:
         user_exists = db.query(User).filter_by(email=user_credentials.email).first()
+        user_credentials = user_credentials.dict(exclude={'confirm_password'})
         if user_exists is None:
-            user = User(**user_credentials.dict(), created_at=datetime.utcnow())
+            user = User(**user_credentials, created_at=datetime.utcnow())
             db.add(user)
             db.commit()
             return JSONResponse(content={'message':'User registered successfully','status_code':201 , 'status':True}, status_code=201)
