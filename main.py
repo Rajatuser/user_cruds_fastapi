@@ -188,7 +188,7 @@ class Users_cred(BaseModel):
         return v
 
     @validator("password")
-    def hash_password(cls, v):
+    def hashing_password(cls, v):
         return hash_password(v)
     class Config:
         extra = Extra.forbid
@@ -235,7 +235,7 @@ class updated_password(BaseModel):
         return v
 
     @validator("password")
-    def hash_password(cls, v):
+    def hashing_password(cls, v):
         return hash_password(v)
 
 class change_password(BaseModel):
@@ -271,7 +271,7 @@ class change_password(BaseModel):
         return v
     
     @validator("new_password")
-    def hash_password(cls, v):
+    def hashing_password(cls, v):
         return hash_password(v)
 
 class login(BaseModel):
@@ -389,7 +389,7 @@ class Update_user_info(BaseModel):
         return v
     
     @validator("password")
-    def hash_password(cls, v):
+    def hashing_password(cls, v):
         return hash_password(v)
     
     class Config:
@@ -530,7 +530,7 @@ def update_user(id: int, update_credentials: Update_user_info = Body(),current_u
                 return JSONResponse(content={'message':{'validation_errors':{'email':['The email has already been taken']}}}, status_code=409)
             user_exists.email = update_credentials.email
         if update_credentials.password is not None:
-            user_exists.password = hash_password(update_credentials.password)
+            user_exists.password = update_credentials.password
         if update_credentials.name is not None:
             user_exists.name = update_credentials.name
         if update_credentials.role is not None:
